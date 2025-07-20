@@ -43,7 +43,7 @@ function App() {
   const handleFetch = async () => {
     try {
       setLoading(true)
-      const response = await axios.post("https://atolentinocv.site/spotify/fetch2.php", {
+      const response = await axios.post("https://atolentinocv.site/spotify/fetch.php", {
         artistUrl,
       })
 
