@@ -92,7 +92,7 @@ function App() {
   if (loading) return <Loading />
 
   const visibleRows = csvData.slice(1).slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage)
-
+console.log(artistName)
   return (
     <div className="p-6 space-y-6 max-w-6xl mx-auto">
       <h2 className="text-2xl font-bold">Spotify Artist Track Exporter</h2>
