@@ -1,5 +1,5 @@
-import { useState } from "react"
-import axios from "axios"
+import { useState } from "react";
+import axios from "axios";
 import {
   Table,
   TableBody,
@@ -7,106 +7,184 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from "@/components/ui/table"
-import { Input } from "@/components/ui/input"
-import { Button } from "@/components/ui/button"
-import { Pagination, PaginationContent, PaginationItem, PaginationNext, PaginationPrevious } from "@/components/ui/pagination"
-import Loading from "@/components/loader"
-import * as XLSX from "xlsx"
+} from "@/components/ui/table";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
+import {
+  Pagination,
+  PaginationContent,
+  PaginationItem,
+  PaginationNext,
+  PaginationPrevious,
+} from "@/components/ui/pagination";
+import Loading from "@/components/loader";
+import * as XLSX from "xlsx";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import ErrorAlertDialog from "@/components/alert";
 
 // Utility: Sort rows by column index
 const sortByColumn = (data: string[][], index: number, asc = true) => {
-  const header = data[0]
-  const rows = data.slice(1)
+  const header = data[0];
+  const rows = data.slice(1);
   rows.sort((a, b) => {
-    const valA = a[index]?.toLowerCase() ?? ""
-    const valB = b[index]?.toLowerCase() ?? ""
-    return asc ? valA.localeCompare(valB) : valB.localeCompare(valA)
-  })
-  return [header, ...rows]
-}
+    const valA = a[index]?.toLowerCase() ?? "";
+    const valB = b[index]?.toLowerCase() ?? "";
+    return asc ? valA.localeCompare(valB) : valB.localeCompare(valA);
+  });
+  return [header, ...rows];
+};
 
 function App() {
-  const [artistUrl, setArtistUrl] = useState("")
-  const [loading, setLoading] = useState(false)
-  const [csvData, setCsvData] = useState<string[][]>([])
-  const [artistName, setArtistName] = useState("")
-  const [filename, setFilename] = useState("")
-  const [sortColumn, setSortColumn] = useState<number | null>(null)
-  const [sortAsc, setSortAsc] = useState(true)
+  const [artistUrl, setArtistUrl] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [csvData, setCsvData] = useState<string[][]>([]);
+  const [artistName, setArtistName] = useState("");
+  const [filename, setFilename] = useState("");
+  const [sortColumn, setSortColumn] = useState<number | null>(null);
+  const [sortAsc, setSortAsc] = useState(true);
+  const [errorDialogOpen, setErrorDialogOpen] = useState(false);
+  const [errorTitle, setErrorTitle] = useState("");
+  const [errorMessage, setErrorMessage] = useState("");
+
+  // New: Server dropdown state
+  const [server, setServer] = useState("fetch");
 
   // Pagination
-  const itemsPerPage = 10
-  const [currentPage, setCurrentPage] = useState(1)
-  const totalPages = Math.ceil((csvData.length - 1) / itemsPerPage)
+  const itemsPerPage = 10;
+  const [currentPage, setCurrentPage] = useState(1);
+  const totalPages = Math.ceil((csvData.length - 1) / itemsPerPage);
 
   const handleFetch = async () => {
     try {
-      setLoading(true)
-      const response = await axios.post("https://atolentinocv.site/spotify/fetch.php", {
-        artistUrl,
-      })
+      setLoading(true);
+      const endpoint = `https://atolentinocv.site/spotify/${server}.php`;
+      const response = await axios.post(endpoint, { artistUrl });
 
-      const { artist, content } = response.data
-      const rows = content.trim().split("\n").map((row: string) => row.split(","))
+      const { artist, content } = response.data;
+      const rows = content
+        .trim()
+        .split("\n")
+        .map((row: string) => row.split(","));
 
-      setArtistName(artist)
-      setFilename(artist)
-      setCsvData(rows)
-      setCurrentPage(1)
-    } catch (err) {
-      alert("Error fetching artist data")
+      setArtistName(artist);
+      setFilename(artist);
+      setCsvData(rows);
+      setCurrentPage(1);
+    } catch (err: any) {
+      if (axios.isAxiosError(err)) {
+        if (err.response?.status === 429) {
+          const retryAfter =
+            err.response.headers["retry-after"] || "a few seconds";
+          setErrorTitle("Rate Limit Reached");
+          setErrorMessage(
+            `Too many requests. Please try again after ${retryAfter} or switch to another server.`
+          );
+        } else {
+          setErrorTitle("Error Fetching Data");
+          setErrorMessage(
+            "There was an error fetching artist data. Please check the URL or try again."
+          );
+        }
+      } else {
+        setErrorTitle("Unexpected Error");
+        setErrorMessage("Something went wrong. Please try again later.");
+      }
+      setErrorDialogOpen(true);
     } finally {
-      setLoading(false)
+      setLoading(false);
+      console.log(artistName)
     }
-  }
+  };
 
   const handleExport = (type: "txt" | "csv" | "xlsx") => {
-    const name = filename.trim() || "spotify_tracks"
+    const name = filename.trim() || "spotify_tracks";
 
     if (type === "txt" || type === "csv") {
-      const mime = type === "csv" ? "text/csv" : "text/plain"
-      const blob = new Blob([csvData.map(row => row.join(",")).join("\n")], { type: mime })
-      const link = document.createElement("a")
-      link.href = URL.createObjectURL(blob)
-      link.download = `${name}.${type}`
-      link.click()
+      const mime = type === "csv" ? "text/csv" : "text/plain";
+      const blob = new Blob([csvData.map((row) => row.join(",")).join("\n")], {
+        type: mime,
+      });
+      const link = document.createElement("a");
+      link.href = URL.createObjectURL(blob);
+      link.download = `${name}.${type}`;
+      link.click();
     }
 
     if (type === "xlsx") {
-      const worksheet = XLSX.utils.aoa_to_sheet(csvData)
-      const workbook = XLSX.utils.book_new()
-      XLSX.utils.book_append_sheet(workbook, worksheet, "Tracks")
-      XLSX.writeFile(workbook, `${name}.xlsx`)
+      const worksheet = XLSX.utils.aoa_to_sheet(csvData);
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, worksheet, "Tracks");
+      XLSX.writeFile(workbook, `${name}.xlsx`);
     }
-  }
+  };
 
   const handleSort = (colIndex: number) => {
-    const asc = sortColumn === colIndex ? !sortAsc : true
-    setSortColumn(colIndex)
-    setSortAsc(asc)
-    const sorted = sortByColumn(csvData, colIndex, asc)
-    setCsvData(sorted)
-  }
+    const asc = sortColumn === colIndex ? !sortAsc : true;
+    setSortColumn(colIndex);
+    setSortAsc(asc);
+    const sorted = sortByColumn(csvData, colIndex, asc);
+    setCsvData(sorted);
+  };
 
-  if (loading) return <Loading />
+  if (loading) return <Loading />;
 
-  const visibleRows = csvData.slice(1).slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage)
-console.log(artistName)
+  const visibleRows = csvData
+    .slice(1)
+    .slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
+
   return (
     <div className="p-6 space-y-6 max-w-6xl mx-auto">
-      <h2 className="text-2xl font-bold">Spotify Artist Track Exporter</h2>
-
-      <Input
-        type="text"
-        placeholder="Paste Spotify artist URL"
-        value={artistUrl}
-        onChange={(e) => setArtistUrl(e.target.value)}
+      <ErrorAlertDialog
+        open={errorDialogOpen}
+        onOpenChange={setErrorDialogOpen}
+        title={errorTitle}
+        description={errorMessage}
       />
 
-      <Button onClick={handleFetch} disabled={loading}>
-        Fetch Tracks
-      </Button>
+      <h2 className="text-2xl font-bold">Spotify Artist Track Exporter</h2>
+
+      <div className="flex flex-col md:flex-row gap-4 items-center">
+        <Input
+          type="text"
+          placeholder="Paste Spotify artist URL"
+          value={artistUrl}
+          onChange={(e) => setArtistUrl(e.target.value)}
+          className="w-full md:w-2/3"
+        />
+
+        {/* New Dropdown */}
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="outline">
+              {server === "fetch"
+                ? "Server 1"
+                : server === "fetch1"
+                ? "Server 2"
+                : "Server 3"}
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent>
+            <DropdownMenuItem onClick={() => setServer("fetch")}>
+              Server 1
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => setServer("fetch1")}>
+              Server 2
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => setServer("fetch2")}>
+              Server 3
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+
+        <Button onClick={handleFetch} disabled={loading}>
+          Fetch Tracks
+        </Button>
+      </div>
 
       {csvData.length > 1 && (
         <div className="space-y-4">
@@ -155,13 +233,14 @@ console.log(artistName)
             </Table>
           </div>
 
-          {/* Pagination Controls */}
           <Pagination>
             <PaginationContent>
               <PaginationItem>
                 <PaginationPrevious
                   onClick={() => setCurrentPage((p) => Math.max(p - 1, 1))}
-                  className={currentPage === 1 ? "pointer-events-none opacity-50" : ""}
+                  className={
+                    currentPage === 1 ? "pointer-events-none opacity-50" : ""
+                  }
                 />
               </PaginationItem>
               <PaginationItem>
@@ -171,8 +250,14 @@ console.log(artistName)
               </PaginationItem>
               <PaginationItem>
                 <PaginationNext
-                  onClick={() => setCurrentPage((p) => Math.min(p + 1, totalPages))}
-                  className={currentPage === totalPages ? "pointer-events-none opacity-50" : ""}
+                  onClick={() =>
+                    setCurrentPage((p) => Math.min(p + 1, totalPages))
+                  }
+                  className={
+                    currentPage === totalPages
+                      ? "pointer-events-none opacity-50"
+                      : ""
+                  }
                 />
               </PaginationItem>
             </PaginationContent>
@@ -180,7 +265,7 @@ console.log(artistName)
         </div>
       )}
     </div>
-  )
+  );
 }
 
-export default App
+export default App;
